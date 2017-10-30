@@ -71,6 +71,7 @@ int modeVoltage = 0;
 int currentMode = 1;
 int CurrentHour = 15;
 int inChar = 0;
+int OneWireDwell = 1000;
 
 long shimmerRandom = 0;
 
@@ -85,6 +86,7 @@ unsigned long PreviousTime = 0;
 unsigned long HourDurationCounter = 0;
 unsigned long HourDurationPreviousTime = 0;
 unsigned long pctime = 0;
+unsigned long OneWireTimeStamp = 0;
 
     int LedValues[24][2] = { 
                         {0,0},     //hour 0
@@ -424,26 +426,29 @@ float TMP36Evaluation (int pinToRead) {
   return result; //result is in degrees F
 
 //Water Temperature Sense using 1wire system  
-  if ( !ds.search(addr)) {
-    Serial.println("No more addresses.");
-    Serial.println();
+  if ( !ds.search(addr)) //Start a new search for a connected device if an address is not present 
+   {        
+    //Serial.println("No more addresses.");
+    //Serial.println();
     ds.reset_search();
-    delay(250);
+    //delay(250);
     return;
-  }
+   }
   
-  Serial.print("ROM =");
-  for( i = 0; i < 8; i++) {
-    Serial.write(' ');
-    Serial.print(addr[i], HEX);
-  }
-
-  if (OneWire::crc8(addr, 7) != addr[7]) {
+  if (ds.search(addr)) 
+   {
+    Serial.print("ROM =");
+      for( i = 0; i < 8; i++) {
+        Serial.write(' ');
+        Serial.print(addr[i], HEX);
+   }
+   
+  if (OneWire::crc8(addr, 7) != addr[7]) 
+   {
       Serial.println("CRC is not valid!");
-      return;
-  }
+      return; 
+   }
   Serial.println();
- 
   // the first ROM byte indicates which chip
   switch (addr[0]) {
     case 0x10:
@@ -461,36 +466,43 @@ float TMP36Evaluation (int pinToRead) {
     default:
       Serial.println("Device is not a DS18x20 family device.");
       return;
-  } 
-
+  }
+  
+  //communication with the selected address over the onewire system
+  // begin the communication by resetting the wire
   ds.reset();
   ds.select(addr);
   ds.write(0x44, 1);        // start conversion, with parasite power on at the end
-  
-  delay(1000);     // maybe 750ms is enough, maybe not
-  // we might do a ds.depower() here, but the reset will take care of it.
-  
-  present = ds.reset();
-  ds.select(addr);    
-  ds.write(0xBE);         // Read Scratchpad
+  OneWireTimeStamp = Now;
 
-  Serial.print("  Data = ");
-  Serial.print(present, HEX);
-  Serial.print(" ");
-  for ( i = 0; i < 9; i++) {           // we need 9 bytes
-    data[i] = ds.read();
-    Serial.print(data[i], HEX);
+  if (Now > (OneWireTimeStamp + OneWireDwell))
+  {
+     // we might do a ds.depower() here, but the reset will take care of it.
+  
+    present = ds.reset();
+    ds.select(addr);    
+    ds.write(0xBE);         // Read Scratchpad
+  
+    Serial.print("  Data = ");
+    Serial.print(present, HEX);
     Serial.print(" ");
-  }
-  Serial.print(" CRC=");
-  Serial.print(OneWire::crc8(data, 8), HEX);
-  Serial.println();
+   for ( i = 0; i < 9; i++) {           // we need 9 bytes
+      data[i] = ds.read();
+      Serial.print(data[i], HEX);
+      Serial.print(" ");
+    }
+    
+    Serial.print(" CRC=");
+    Serial.print(OneWire::crc8(data, 8), HEX);
+    Serial.println();
 
   // Convert the data to actual temperature
   // because the result is a 16 bit signed integer, it should
   // be stored to an "int16_t" type, which is always 16 bits
   // even when compiled on a 32 bit processor.
+  
   int16_t raw = (data[1] << 8) | data[0];
+  
   if (type_s) {
     raw = raw << 3; // 9 bit resolution default
     if (data[7] == 0x10) {
@@ -512,8 +524,10 @@ float TMP36Evaluation (int pinToRead) {
   Serial.print(" Celsius, ");
   Serial.print(fahrenheit);
   Serial.println(" Fahrenheit");
-
-
+  }
+  
+  
+  }
 
 //end of loop
 }
